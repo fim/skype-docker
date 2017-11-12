@@ -1,0 +1,70 @@
+#!/bin/bash
+# Based on the startup script from https://github.com/sameersbn/docker-skype
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+SKYPE_USER=skype
+
+XSOCK=/tmp/.X11-unix
+XAUTH=/tmp/.docker.xauth
+
+DOWNLOAD_DIR=$(xdg-user-dir DOWNLOAD 2>/dev/null)
+if [ -z "${DOWNLOAD_DIR}" ]; then
+    DOWNLOAD_DIR="${HOME}/Downloads"
+fi;
+
+cleanup_stopped_skype_instances(){
+  echo "Cleaning up stopped skype instances..."
+  for c in $(${SUDO} docker ps -a -q)
+  do
+    image="$(${SUDO} docker inspect -f {{.Config.Image}} ${c})"
+    if [[ "${image}" =~ "eyehatefim/skype"* ]]; then
+      running=$(${SUDO} docker inspect -f {{.State.Running}} ${c})
+      if [ "${running}" = "true" ]; then
+        ${SUDO} docker stop "${c}" >/dev/null
+      fi
+      ${SUDO} docker rm "${c}" >/dev/null
+    fi
+  done
+}
+
+prepare_docker_env_parameters() {
+  ENV_VARS+=" --env=DISPLAY"
+  ENV_VARS+=" --env=XAUTHORITY=${XAUTH}"
+  ENV_VARS+=" --env=TZ=$(date +%Z)"
+}
+
+prepare_docker_volume_parameters() {
+  touch ${XAUTH}
+  xauth nlist :0 | sed -e 's/^..../ffff/' | xauth -f ${XAUTH} nmerge -
+
+  VOLUMES+=" --volume=${HOME}/.Skype:/root/.Skype" # may be unnecessary
+  VOLUMES+=" --volume=${HOME}/.config/skypeforlinux:/root/.config/skypeforlinux"
+  VOLUMES+=" --volume=${DOWNLOAD_DIR}:/root/Downloads"
+  VOLUMES+=" --volume=${XSOCK}:${XSOCK}"
+  VOLUMES+=" --volume=${XAUTH}:${XAUTH}"
+#  VOLUMES+=" --volume=/run/user/$(id -u)/pulse:/run/pulse"
+  VOLUMES+=" --volume=/dev/shm:/dev/shm"
+}
+
+prepare_docker_device_parameters() {
+  # enumerate video devices for webcam support
+  VIDEO_DEVICES=
+  for device in /dev/video*
+  do
+    if [ -c $device ]; then
+      VIDEO_DEVICES="${VIDEO_DEVICES} --device $device:$device"
+    fi
+  done
+}
+
+cleanup_stopped_skype_instances
+prepare_docker_env_parameters
+prepare_docker_volume_parameters
+prepare_docker_device_parameters
+
+echo "Starting ${prog}..."
+docker run -d \
+  ${ENV_VARS} \
+  ${VIDEO_DEVICES} \
+  ${VOLUMES} \
+  eyehatefim/skype:latest >/dev/null
