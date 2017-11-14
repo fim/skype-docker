@@ -10,4 +10,5 @@ RUN apt-get update && apt-get install -y gdebi curl && \
     rm /tmp/skype.deb && SUDO_FORCE_REMOVE=yes apt autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 
-CMD ["/usr/share/skypeforlinux/skypeforlinux", "-d"]
+ADD start_skype.sh /usr/local/bin/
+CMD ["/usr/local/bin/start_skype.sh"]
